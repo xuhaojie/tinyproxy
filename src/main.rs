@@ -1,20 +1,22 @@
 
-use async_std::net::{TcpListener, TcpStream};
-use async_std::prelude::*;
+use async_std::{
+	net::{TcpListener, TcpStream},
+	prelude::*,
+	task,
+};
 use futures::future::FutureExt;
 use std::io;
-use async_std::task;
-use url::{Host, Origin, Url};
+use url::Url;
+use log::*;
 
 #[async_std::main]
 async fn main() -> std::io::Result<()> {
-	let server = TcpListener::bind("127.0.0.1:8088").await.unwrap();
+	env_logger::init();
+	let server_address = "0.0.0.0:8088";
+	let server = TcpListener::bind(server_address).await.unwrap();
+	info!("listening on {}", server_address);
 	while let Ok((client_stream, client_addr)) = server.accept().await {
-//		println!("accept client: {}", client_addr);
-		// 每接入一个客户端的连接请求，都分配一个子任务，
-		// 如果客户端的并发数量不大，为每个客户端都分配一个thread，
-		// 然后在thread中创建tokio runtime，处理起来会更方便
-
+		info!("accept client: {}", client_addr);
 		task::spawn(async {
 			process_client(client_stream).await;
 		});
@@ -29,29 +31,31 @@ enum Method {
 
 async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 	let addr = &client_stream.peer_addr()?;
-	println!("client addr:{:?}",addr);
+	info!("client addr:{:?}",addr);
 	// Read the CONNECT request
-	let mut buf = [0; 4096];
-	let nbytes = client_stream.read(&mut buf).await?;
+	let mut buf = [0; 256];
+	let bytes = client_stream.read(&mut buf).await?;
 
-	let mut req = String::from("");
-	match std::str::from_utf8(&buf[..nbytes]){
-		Ok(s) => {req = String::from(s)},
+	let mut request;
+	match std::str::from_utf8(&buf[..bytes]){
+		Ok(s) => {request = String::from(s)},
 		Err(e) => {
-			println!("error: {:?}", e);
-			
+			error!("error: {:?}", e);
+			return Err(io::Error::new(io::ErrorKind::Other, e.to_string()));
 		}
 	}
 
 	let mut address : String;
-	let v: Vec<&str> = req.split(' ').collect();
+	let v: Vec<&str> = request.split(' ').collect();
+	if v.len() < 2 {
+		io::Error::new(io::ErrorKind::Other, "failed parse request");
+	}
 	let method = if v[0] == "CONNECT" {
 		address = String::from(v[1]);
-		println!(":CONNECT address: {}", address);
+		info!(":CONNECT address: {}", address);
 		Method::CONNECT
 	} else {
 		address = String::from(v[1]);
-		// println!("{}", address);
 		if address.starts_with("http://"){
  
 			match Url::parse(v[1]) {
@@ -73,14 +77,12 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 				}
 				Err(err) => println!("{}", err),
 			}
-			println!("address: {}", address);
+			debug!("address: {}", address);
 		} else{
-			println!("???? address: {}", address);
+			error!("???? address: {}", address);
 		}
 		Method::OTHER
 	};
-
-
 
 	// Connect to a peer
 	let mut server_stream = TcpStream::connect(address,).await?;
@@ -93,7 +95,7 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 			lw.write_all(b"HTTP/1.1 200 Connection established\r\n\r\n").await?;
 		} ,
 		_ => {
-			tw.write_all(req.as_bytes()).await?;
+			tw.write_all(&buf).await?;
 		},
 	}
 	
