@@ -39,32 +39,23 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 	let client_addr = &client_stream.peer_addr()?;
 	// Read the CONNECT request
 	let mut buf = [0; 4096];
-	let mut count = 0;
-	loop {
-		let bytes = client_stream.read(&mut buf[count..]).await?;
-		if bytes > 0 {
-			count += bytes;
-			if count > 8 {
-				break;
-			}
-		}
-	};
+
+	let count = client_stream.read(&mut buf).await?;
+	if count == 0 {
+		return Ok(());
+	}
 
 	let request;
 	let mut index = 0;
-	for i in buf.iter() {
+	for i in &buf {
 		if *i == '\n' as u8 {
 			break;
 		}
-		if index <= count {
-			index += 1;
-		} else{
-			break
-		}
+		index += 1;
 	}
 
-	if index < 3 {
-		return Err(io::Error::new(io::ErrorKind::Other, "request to short"));
+	if index < 8 {
+		return Err(io::Error::new(io::ErrorKind::Other, "request too short"));
 	}
 
 	debug!("index: {:?}", index);
