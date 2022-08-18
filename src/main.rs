@@ -61,18 +61,7 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 			match Url::parse(v[1]) {
 				Ok(url) => {
 					let addr = url.host().unwrap();
-					address = addr.to_string();
-					address.push_str(":80");
-					address.push_str(":");
-					let mut port :u16 = 80;
-					match url.port(){
-						Some(p) => {
-							port = p;
-						},
-						None => {
-					
-						}
-					}
+					let mut port :u16 = match url.port(){Some(p) => p,	None => 80,};
 					address = format!("{}:{}",addr.to_string(), port)
 				}
 				Err(err) => println!("{}", err),
