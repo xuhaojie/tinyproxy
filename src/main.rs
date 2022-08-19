@@ -30,63 +30,41 @@ async fn main() -> std::io::Result<()> {
 	Ok(())
 }
 
-enum Method {
-	CONNECT,
-	OTHER,
-}
-
 async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 	let client_addr = &client_stream.peer_addr()?;
 	// Read the CONNECT request
-	let mut buf = [0; 4096];
+	let mut buf = [0; 1024];
 
 	let count = client_stream.read(&mut buf).await?;
 	if count == 0 {
 		return Ok(());
 	}
-
-	let request;
-	let mut index = 0;
-	for i in &buf {
-		if *i == '\n' as u8 {
-			break;
-		}
-		index += 1;
-	}
-
-	if index < 8 {
-		return Err(io::Error::new(io::ErrorKind::Other, "request too short"));
-	}
-
-	debug!("index: {:?}", index);
-
-	match std::str::from_utf8(&buf[..index]){
-	Ok(s) => {
-			request = String::from(s);
-		},
-		Err(e) => {
-			error!("error: {:?}", e);
-			return Err(io::Error::new(io::ErrorKind::Other, e.to_string()));
-		}
-	}
 	
-	let mut address : String;
-	let v: Vec<&str> = request.split(' ').collect();
-	if v.len() < 2 {
+	let parse_error = Err(io::Error::new(io::ErrorKind::Other, "failed parse request"));
+
+	let mut lines = buf.split(|c| *c == '\n' as u8);
+	let request = if let Some(line) = lines.next(){
+		if let Ok(req) = std::str::from_utf8(line){
+			req.to_owned()
+		} else {
+			"".to_owned()
+		}
+	} else {"".to_owned()};
+
+	let fields: Vec<&str> = request.split(' ').collect();
+	if fields.len() < 2 {
 		error!("bad request: {}", request);
-		return Err(io::Error::new(io::ErrorKind::Other, "failed parse request"));
+		return parse_error;
 	}
 
 	info!("{} -> {}", client_addr.to_string(), request);
-
-	address = String::from(v[1]);
-	let method = if v[0] == "CONNECT" {
-		debug!("CONNECT address: {}", address);
-		Method::CONNECT
+	let mut address = String::from(fields[1]);
+	let method  = fields[0];
+	let connect = if method == "CONNECT" {
+		true
 	} else {
-		debug!("{} address: {}",v[0], address);
 		if address.starts_with("http://") {
- 			match Url::parse(v[1]) {
+ 			match Url::parse(fields[1]) {
 				Ok(url) => {
 					let addr = url.host().unwrap();
 					let port :u16 = match url.port(){Some(p) => p,	None => 80,};
@@ -94,26 +72,22 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 				}
 				Err(err) => println!("{}", err),
 			}
-			debug!("address: {}", address);
 		} else{
 			error!("???? address: {}", address);
 		}
-		Method::OTHER
+		false
 	};
-
+	debug!("{} address: {}", method, address);
 	// Connect to a peer
 	let server_stream = TcpStream::connect(address,).await?;
 
 	let (local_reader, local_writer) = &mut (&client_stream, &client_stream);
 	let (server_reader, server_writer) = &mut (&server_stream, &server_stream);
 
-	match method {
-		Method::CONNECT => {
+	if connect {
 			local_writer.write_all(b"HTTP/1.1 200 Connection established\r\n\r\n").await?;
-		} ,
-		_ => {
+	} else {
 			server_writer.write_all(&buf).await?;
-		},
 	}
 	
     let copy_task_a = async_std::io::copy(local_reader, server_writer);
@@ -125,5 +99,4 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
     };
 
     Ok(())
-	
 }
