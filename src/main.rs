@@ -39,14 +39,14 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 	let request = match lines.next() {
 		Some(line) => match std::str::from_utf8(line) {
 			Ok(req) => req.to_owned(),
-			_ => return Err(io::Error::new(io::ErrorKind::Other,format!("bad utf-8 string"))),
+			_ => return Err(io::Error::new(io::ErrorKind::Other,"bad utf-8 string")),
 		},
-		_ => return Err(io::Error::new(io::ErrorKind::Other,format!("failed split lines"))),
+		_ => return Err(io::Error::new(io::ErrorKind::Other,"failed split lines")),
 	};
 
 	let fields: Vec<&str> = request.split(' ').collect();
 	if fields.len() < 2 {
-		return Err(io::Error::new(io::ErrorKind::Other,format!("bad request")));
+		return Err(io::Error::new(io::ErrorKind::Other,"bad request"));
 	}
 
 	info!("{} -> {}", client_addr.to_string(), request);
@@ -64,7 +64,7 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 						let port: u16 = match url.port() { Some(p) => p, None => 80, };
 						format!("{}:{}", addr.to_string(), port)
 					} else {
-						return Err(io::Error::new(io::ErrorKind::Other, format!("bad host in url")));
+						return Err(io::Error::new(io::ErrorKind::Other, "bad host in url"));
 					}
 				}
 				_ => return Err(io::Error::new(io::ErrorKind::Other, format!("failed to parse url: {}", fields[1]))),
