@@ -63,18 +63,6 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 	let connect = if method == "CONNECT" {
 		true
 	} else {
-		if address.starts_with("http://") {
- 			match Url::parse(fields[1]) {
-				Ok(url) => {
-					let addr = url.host().unwrap();
-					let port :u16 = match url.port(){Some(p) => p,	None => 80,};
-					address = format!("{}:{}",addr.to_string(), port)
-				}
-				Err(err) => println!("{}", err),
-			}
-		} else{
-			error!("???? address: {}", address);
-		}
 		false
 	};
 	debug!("{} address: {}", method, address);
