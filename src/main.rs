@@ -63,6 +63,14 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 	let connect = if method == "CONNECT" {
 		true
 	} else {
+		match Url::parse(fields[1]) {
+			Ok(url) => {
+				let addr = url.host().unwrap();
+				let port :u16 = match url.port(){Some(p) => p,	None => 80,};
+				address = format!("{}:{}",addr.to_string(), port)
+			}
+			Err(err) => println!("{}", err),
+		}
 		false
 	};
 	debug!("{} address: {}", method, address);
@@ -75,7 +83,7 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 	if connect {
 			local_writer.write_all(b"HTTP/1.1 200 Connection established\r\n\r\n").await?;
 	} else {
-			server_writer.write_all(&buf).await?;
+			server_writer.write_all(&buf[..count]).await?;
 	}
 	
     let copy_task_a = async_std::io::copy(local_reader, server_writer);
