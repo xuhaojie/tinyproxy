@@ -53,7 +53,7 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 
 	let method = fields[0];
 	let url = fields[1];
-	let (connect, address) = if method == "CONNECT" {
+	let (https, address) = if method == "CONNECT" {
 		(true, String::from(url))
 	} else {
 		(
@@ -79,7 +79,7 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 	let (local_reader, local_writer) = &mut (&client_stream, &client_stream);
 	let (server_reader, server_writer) = &mut (&server_stream, &server_stream);
 
-	if connect {
+	if https {
 		local_writer.write_all(b"HTTP/1.1 200 Connection established\r\n\r\n").await?;
 	} else {
 		server_writer.write_all(&buf[..count]).await?;
