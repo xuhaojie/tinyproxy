@@ -37,10 +37,7 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 
 	let mut lines = buf.split(|c| *c == '\n' as u8);
 	let request = match lines.next() {
-		Some(line) => match std::str::from_utf8(line) {
-			Ok(req) => req.to_owned(),
-			_ => return Err(io::Error::new(io::ErrorKind::Other,"bad utf-8 string")),
-		},
+		Some(line) =>  String::from_utf8_lossy(&line),
 		_ => return Err(io::Error::new(io::ErrorKind::Other,"failed split lines")),
 	};
 
