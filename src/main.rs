@@ -30,30 +30,25 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 		return Ok(());
 	}
 
-	let mut lines = buf.split(|c| *c == '\n' as u8);
-	let request = match lines.next() {
-		Some(line) =>  String::from_utf8_lossy(&line),
-		_ => return Err(io::Error::new(io::ErrorKind::Other,"failed split lines")),
-	};
-
-	let fields: Vec<&str> = request.split(' ').collect();
+	let request = String::from_utf8_lossy(&buf);
+	let line = request.lines().next().unwrap();
+	let fields: Vec<&str> = line.split_whitespace().collect();
 	if fields.len() < 2 {
 		return Err(io::Error::new(io::ErrorKind::Other,"bad request"));
 	}
 
-	info!("{} -> {}", client_addr.to_string(), request);
+	info!("{} -> {}", client_addr.to_string(), line);
 
 	let method = fields[0];
-	let url = fields[1];
 	let (https, address) = if method == "CONNECT" {
-		(true, String::from(url))
+		(true, String::from(fields[1]))
 	} else {
 		(
 			false,
-			match Url::parse(url) {
+			match Url::parse(fields[1]) {
 				Ok(url) => {
 					if let Some(addr) = url.host() {
-						let port: u16 = match url.port() { Some(p) => p, None => 80, }; // 	let port: u16 = url.port().unwrap_or(80);
+						let port: u16 = url.port().unwrap_or(80);
 						format!("{}:{}", addr.to_string(), port)
 					} else {
 						return Err(io::Error::new(io::ErrorKind::Other, "bad host in url"));
