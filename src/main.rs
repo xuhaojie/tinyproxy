@@ -1,4 +1,4 @@
-use async_std::{ net::{TcpListener, TcpStream},	prelude::*,	task,};
+use async_std::{ net::{SocketAddr, TcpListener, TcpStream},	prelude::*,	task,};
 use futures::future::FutureExt;
 use log::*;
 use std::io;
@@ -12,8 +12,8 @@ async fn main() -> std::io::Result<()> {
 	info!("listening on {}", server_address);
 	while let Ok((client_stream, client_addr)) = server.accept().await {
 		debug!("accept client: {}", client_addr);
-		task::spawn(async {
-			match process_client(client_stream).await {
+		task::spawn(async move {
+			match process_client(client_stream, client_addr).await {
 				Ok(()) => (),
 				Err(e) => error!("error: {}", e),
 			}
@@ -22,8 +22,7 @@ async fn main() -> std::io::Result<()> {
 	Ok(())
 }
 
-async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
-	let client_addr = &client_stream.peer_addr()?;
+async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -> io::Result<()> {
 	let mut buf = [0; 1024];
 	
 	let count = client_stream.read(&mut buf).await?;
@@ -54,7 +53,7 @@ async fn process_client(mut client_stream: TcpStream) -> io::Result<()> {
 			match Url::parse(url) {
 				Ok(url) => {
 					if let Some(addr) = url.host() {
-						let port: u16 = match url.port() { Some(p) => p, None => 80, };
+						let port: u16 = match url.port() { Some(p) => p, None => 80, }; // 	let port: u16 = url.port().unwrap_or(80);
 						format!("{}:{}", addr.to_string(), port)
 					} else {
 						return Err(io::Error::new(io::ErrorKind::Other, "bad host in url"));
