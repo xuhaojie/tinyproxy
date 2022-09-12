@@ -52,9 +52,9 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 	if https { local_writer.write_all(b"HTTP/1.1 200 Connection established\r\n\r\n").await?;} 
 	else { server_writer.write_all(&buf[..count]).await?; }
 
-	let copy_task_a = async_std::io::copy(local_reader, server_writer);
-	let copy_task_b = async_std::io::copy(server_reader, local_writer);
+	let copy_task_tx = async_std::io::copy(local_reader, server_writer);
+	let copy_task_rx = async_std::io::copy(server_reader, local_writer);
 
-	let _ = futures::select! { r1 = copy_task_a.fuse() => r1, r2 = copy_task_b.fuse() => r2 };
+	let _ = futures::select! { r1 = copy_task_tx.fuse() => r1, r2 = copy_task_rx.fuse() => r2 };
 	Ok(())
 }
