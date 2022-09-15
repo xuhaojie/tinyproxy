@@ -1,12 +1,14 @@
-use {log::*, url::Url, anyhow::{*,Result},futures::future::FutureExt};
-use async_std::{ net::{SocketAddr, TcpListener, TcpStream},	prelude::*,	task,};
+use {log::*, url::Url, anyhow::{*,Result}, futures::future::FutureExt, dotenv};
+use async_std::{ net::{SocketAddr, TcpListener, TcpStream},	prelude::*,	task};
 
 #[async_std::main]
 async fn main() -> Result<()> {
 	env_logger::init();
-	let server_address = "0.0.0.0:8088";
-	let server = TcpListener::bind(server_address).await.unwrap();
-	info!("listening on {}", server_address);
+	dotenv::dotenv().ok();
+	let server_address = dotenv::var("SERVER_ADDRESS").unwrap_or("0.0.0.0:8088".to_owned());
+
+	let server = TcpListener::bind(&server_address).await.unwrap();
+	info!("listening on {}", &server_address);
 	while let Result::Ok((client_stream, client_addr)) = server.accept().await {
 		debug!("accept client: {}", client_addr);
 		task::spawn(async move {
@@ -15,7 +17,7 @@ async fn main() -> Result<()> {
 	}
 	Ok(())
 }
-  
+
 async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -> Result<()> {
 	let mut buf = [0; 1024];
 	let count = client_stream.read(&mut buf).await?;
@@ -28,8 +30,7 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 
 	info!("{} -> {}", client_addr.to_string(), line);
 
-	let method = fields[0];
-	let url = Url::parse(fields[1])?;
+	let (method, url) = (fields[0], Url::parse(fields[1])?);
 	let (https, address) = if method == "CONNECT" {
 		(true, String::from(fields[1]))
 	} else {(
@@ -54,7 +55,6 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 
 	let copy_task_tx = async_std::io::copy(local_reader, server_writer);
 	let copy_task_rx = async_std::io::copy(server_reader, local_writer);
-
 	let _ = futures::select! { r1 = copy_task_tx.fuse() => r1, r2 = copy_task_rx.fuse() => r2 };
 	Ok(())
 }
