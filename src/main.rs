@@ -31,17 +31,14 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 	info!("{} -> {}", client_addr.to_string(), line);
 
 	let (method, url) = (fields[0], Url::parse(fields[1])?);
-	let (https, address) = if method == "CONNECT" {
-		(true, String::from(fields[1]))
-	} else {(
-		false,
-		if let Some(addr) = url.host() {
-			let port: u16 = url.port().unwrap_or(80);
-			format!("{}:{}", addr.to_string(), port)
-		} else {
-			return Err(anyhow!( "bad host in url"));
+
+	let (https, address) = match method{
+		"CONNECT"  => (true, String::from(fields[1])),
+		_ => match url.host() {
+			Some(addr) => (false, format!("{}:{}", addr.to_string(), url.port().unwrap_or(80))),
+			_ => return Err(anyhow!( "bad host in url"))
 		}
-	)};
+	};
 
 	debug!("{} address: {}", method, address);
 
