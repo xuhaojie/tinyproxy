@@ -1,4 +1,4 @@
-use {log::*, url::Url, anyhow::{*,Result}, futures::future::FutureExt, dotenv};
+use {log::*, url::Url, anyhow::{*, Result}, futures::future::FutureExt, dotenv};
 use async_std::{ net::{SocketAddr, TcpListener, TcpStream},	prelude::*,	task};
 
 #[async_std::main]
@@ -24,16 +24,15 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 	if count == 0 { return Ok(()); }
 
 	let request = String::from_utf8_lossy(&buf);
-	let line = request.lines().next().unwrap_or("");
-	let fields: Vec<&str> = line.split_whitespace().collect();
-	if fields.len() < 2 { return Err(anyhow!("bad request")); }
+	let line =match request.lines().next() {Some(l) => l, None => return Err(anyhow!("bad request")) };
+	let mut fields = line.split_whitespace();
+	let method = match fields.next() {Some(m) => m, None => return Err(anyhow!("can't find request method"))};
+	let url = match fields.next() {Some(u) =>  Url::parse(u)?, None => return Err(anyhow!("bad url"))};
 
 	info!("{} -> {}", client_addr.to_string(), line);
 
-	let (method, url) = (fields[0], Url::parse(fields[1])?);
-
-	let (https, address) = match method{
-		"CONNECT"  => (true, String::from(fields[1])),
+	let (https, address) = match method {
+		"CONNECT"  => (true, String::from(url)),
 		_ => match url.host() {
 			Some(addr) => (false, format!("{}:{}", addr.to_string(), url.port().unwrap_or(80))),
 			_ => return Err(anyhow!( "bad host in url"))
