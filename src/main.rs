@@ -17,6 +17,20 @@ async fn main() -> Result<()> {
 	}
 	Ok(())
 }
+use core::str::Lines;
+fn find_host<'a>(lines: &'a mut Lines) -> Result<&'a str>{
+	while let Some(line) = lines.next() {
+		let mut fields = line.split(':');
+		if let Some(key) = fields.next(){
+			if key == "Host" {
+				if let Some(value) = fields.next() {
+					return Ok(value);
+				}
+			}
+		}
+	}
+	Err(anyhow!("can't find host"))
+}
 
 async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -> Result<()> {
 	let mut buf = [0; 1024];
@@ -24,12 +38,11 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 	if count == 0 { return Ok(()); }
 
 	let request = String::from_utf8_lossy(&buf);
-	let line =match request.lines().next() {Some(l) => l, None => return Err(anyhow!("bad request")) };
+	let mut lines = request.lines();
+	let line = match lines.next() {Some(l) => l, None => return Err(anyhow!("bad request")) };
 	let mut fields = line.split_whitespace();
 	let method = match fields.next() {Some(m) => m, None => return Err(anyhow!("can't find request method"))};
-	let url_str = match fields.next() {Some(u) =>  u, None => return Err(anyhow!("bad url"))};
-
-	info!("{} -> {}", client_addr.to_string(), line);
+	let url_str = match fields.next() {Some(u) =>  u, None => return Err(anyhow!("can't find url"))};
 
 	let (https, address) = match method {
 		"CONNECT"  => (true, String::from(url_str)),
@@ -37,12 +50,20 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 			let url =  Url::parse(url_str)?;
 			match url.host() {
 				Some(addr) => (false, format!("{}:{}", addr.to_string(), url.port().unwrap_or(80))),
-				_ => return Err(anyhow!( "bad host in url"))
+				_ => {
+					let host = find_host(&mut lines)?;
+					error!("get host from head {}", host);
+					if host.contains(":") {
+						(false, host.to_string())
+					} else {
+						(false, format!("{}:{}",host,80))
+					}
+				}
 			}
 		}
 	};
 
-	debug!("{} address: {}", method, address);
+	info!("{} -> {}", client_addr.to_string(), line);
 
 	let server_stream = TcpStream::connect(address).await?;
 
