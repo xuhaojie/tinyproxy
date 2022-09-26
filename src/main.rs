@@ -27,15 +27,19 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 	let line =match request.lines().next() {Some(l) => l, None => return Err(anyhow!("bad request")) };
 	let mut fields = line.split_whitespace();
 	let method = match fields.next() {Some(m) => m, None => return Err(anyhow!("can't find request method"))};
-	let url = match fields.next() {Some(u) =>  Url::parse(u)?, None => return Err(anyhow!("bad url"))};
+	let url = match fields.next() {Some(u) =>  u, None => return Err(anyhow!("bad url"))};
 
 	info!("{} -> {}", client_addr.to_string(), line);
 
 	let (https, address) = match method {
 		"CONNECT"  => (true, String::from(url)),
-		_ => match url.host() {
-			Some(addr) => (false, format!("{}:{}", addr.to_string(), url.port().unwrap_or(80))),
-			_ => return Err(anyhow!( "bad host in url"))
+		_ => {
+			let u =  Url::parse(url)?;
+			match u.host() {
+				Some(addr) => (false, format!("{}:{}", addr.to_string(), u.port().unwrap_or(80))),
+				_ => return Err(anyhow!( "bad host in url"))
+	
+			}
 		}
 	};
 
