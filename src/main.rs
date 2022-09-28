@@ -1,11 +1,13 @@
 use {log::*, url::Url, anyhow::{*, Result}, futures::future::FutureExt, dotenv};
 use async_std::{ net::{SocketAddr, TcpListener, TcpStream},	prelude::*,	task};
 
+const BUFFER_SIZE: usize = 256;
+
 #[async_std::main]
 async fn main() -> Result<()> {
 	env_logger::init();
 	dotenv::dotenv().ok();
-	let server_address = dotenv::var("SERVER_ADDRESS").unwrap_or("0.0.0.0:8088".to_owned());
+	let server_address = dotenv::var("PROXY_ADDRESS").unwrap_or("0.0.0.0:8088".to_owned());
 	let server = TcpListener::bind(&server_address).await.unwrap();
 	info!("listening on {}", &server_address);
 	while let Result::Ok((client_stream, client_addr)) = server.accept().await {
@@ -17,7 +19,7 @@ async fn main() -> Result<()> {
 }
 
 async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -> Result<()> {
-	let mut buf = [0; 1024];
+	let mut buf : [u8; BUFFER_SIZE] = unsafe { std::mem::MaybeUninit::uninit().assume_init() }; 
 	let count = client_stream.read(&mut buf).await?;
 	if count == 0 { return Ok(()); }
 
@@ -51,6 +53,8 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 
 	let copy_task_tx = async_std::io::copy(local_reader, server_writer);
 	let copy_task_rx = async_std::io::copy(server_reader, local_writer);
+
 	let _ = futures::select! { r1 = copy_task_tx.fuse() => r1, r2 = copy_task_rx.fuse() => r2 };
+	
 	Ok(())
 }
