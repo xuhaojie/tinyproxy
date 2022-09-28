@@ -6,30 +6,14 @@ async fn main() -> Result<()> {
 	env_logger::init();
 	dotenv::dotenv().ok();
 	let server_address = dotenv::var("SERVER_ADDRESS").unwrap_or("0.0.0.0:8088".to_owned());
-
 	let server = TcpListener::bind(&server_address).await.unwrap();
 	info!("listening on {}", &server_address);
 	while let Result::Ok((client_stream, client_addr)) = server.accept().await {
-		debug!("accept client: {}", client_addr);
 		task::spawn(async move {
 			match process_client(client_stream, client_addr).await { anyhow::Result::Ok(()) => (), Err(e) => error!("error: {}", e), }
 		});
 	}
 	Ok(())
-}
-use core::str::Lines;
-fn find_host<'a>(lines: &'a mut Lines) -> Result<&'a str>{
-	while let Some(line) = lines.next() {
-		let mut fields = line.split(':');
-		if let Some(key) = fields.next(){
-			if key == "Host" {
-				if let Some(value) = fields.next() {
-					return Ok(value);
-				}
-			}
-		}
-	}
-	Err(anyhow!("can't find host"))
 }
 
 async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -> Result<()> {
@@ -50,15 +34,7 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 			let url =  Url::parse(url_str)?;
 			match url.host() {
 				Some(addr) => (false, format!("{}:{}", addr.to_string(), url.port().unwrap_or(80))),
-				_ => {
-					let host = find_host(&mut lines)?;
-					error!("get host from head {}", host);
-					if host.contains(":") {
-						(false, host.to_string())
-					} else {
-						(false, format!("{}:{}",host,80))
-					}
-				}
+				_ => return Err(anyhow!("can't find host from url")),
 			}
 		}
 	};
