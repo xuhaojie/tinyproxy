@@ -11,6 +11,7 @@ futures = "0.3"
 url = "2.2"
 anyhow = "1.0"
 dotenv = "0.15"
+subslice = "0.2"
 [dependencies.async-std]
 version = "1.12"
 features = ["attributes"]

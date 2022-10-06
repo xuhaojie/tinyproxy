@@ -1,7 +1,7 @@
-use {log::*, url::Url, anyhow::{*, Result}, futures::future::FutureExt, dotenv};
+use {log::*, url::Url, anyhow::{*, Result}, futures::future::FutureExt, dotenv, subslice::SubsliceExt};
 use async_std::{ net::{SocketAddr, TcpListener, TcpStream},	prelude::*,	task};
 
-const BUFFER_SIZE: usize = 256;
+const BUFFER_SIZE: usize = 1024;
 
 #[async_std::main]
 async fn main() -> Result<()> {
@@ -20,12 +20,27 @@ async fn main() -> Result<()> {
 
 async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -> Result<()> {
 	let mut buf : [u8; BUFFER_SIZE] = unsafe { std::mem::MaybeUninit::uninit().assume_init() }; 
-	let count = client_stream.read(&mut buf).await?;
-	if count == 0 { return Ok(()); }
-
-	let request = String::from_utf8_lossy(&buf);
+	let mut c = 0;
+	let (count, index) = loop {
+		let readed = client_stream.read(&mut buf[c..]).await?;
+		if readed == 0 { return Ok(()); }
+		c += readed;
+		match buf.find(&[13, 10, 13, 10]) {
+			Some(pos) => break (c, pos),
+			None => if c < BUFFER_SIZE { // didn't read full request head yet, read more;
+				error!("not find head end yet, read more");
+				continue;
+			} else{
+				let request = String::from_utf8_lossy(&buf[..c]);
+				return  Err(anyhow!("read {} bytes, buffer almost full, but can't find end!\n {}", c, request));
+			}
+		};
+	};
+	
+	let request = String::from_utf8_lossy(&buf[..index]);
 	let mut lines = request.lines();
-	let line = match lines.next() {Some(l) => l, None => return Err(anyhow!("bad request")) };
+	
+	let line = match lines.next() {Some(l) => l, None => return Err(anyhow!("get request line failed!")) };
 	let mut fields = line.split_whitespace();
 	let method = match fields.next() {Some(m) => m, None => return Err(anyhow!("can't find request method"))};
 	let url_str = match fields.next() {Some(u) =>  u, None => return Err(anyhow!("can't find url"))};
@@ -54,7 +69,7 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 	let copy_task_tx = async_std::io::copy(local_reader, server_writer);
 	let copy_task_rx = async_std::io::copy(server_reader, local_writer);
 
-	let _ = futures::select! { r1 = copy_task_tx.fuse() => r1, r2 = copy_task_rx.fuse() => r2 };
+	let _ = futures::select! { r1 = copy_task_tx.fuse() => r1, r2 = copy_task_rx.fuse() => r2 }?;
 	
 	Ok(())
 }
