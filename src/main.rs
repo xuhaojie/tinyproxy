@@ -40,24 +40,11 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 	let request = String::from_utf8_lossy(&buf);
 	let mut auth=false;
 	let mut authcode :String="".to_string();
-	 if  None!=request.find("Proxy-Authorization"){
-				let line : Vec<&str> = request.split("\r\n").collect();
-				for tt in line.iter() { 
-					let fields: Vec<&str> = tt.split_whitespace().collect();
-					let mut i=0;
-				for t in fields.iter(){
-					i+=1;
-					if *t=="Basic"&&i<fields.len(){
-						authcode=fields[i].to_string();
-						let s=decode(authcode.as_str()).unwrap_or( Vec::new());
-						if String::from_utf8(s).unwrap()=="tzf:1234".to_string(){
-							auth=true;
-						}
-					}
-				}
-			}
+  	let mut authcode=base64::encode(b"tzf:1234");
+	 if  None!=request.find(authcode.as_str()){
+		auth=true;	
 	}
-
+	
 	if auth==false{
 		client_stream.write_all(b"HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"*\"\r\n\r\n").await?;
 		 return Ok(())
@@ -83,18 +70,11 @@ async fn process_client(mut client_stream: TcpStream, client_addr: SocketAddr) -
 		(false,address0)
 	};
 	let mut server_stream = TcpStream::connect(address).await?;
-	let (mut local_reader, mut local_writer) = client_stream.split();
-	let (mut server_reader, mut server_writer) = server_stream.split();
-	if https { local_writer.write_all(b"HTTP/1.1 200 Connection established\r\n\r\n").await?;} 
-	else { server_writer.write_all(&buf[..count]).await?; }	
-	let client_to_server = async {
-        io::copy(&mut local_reader, &mut server_writer).await?;
-        server_writer.shutdown().await
-    };
-    let server_to_client = async {
-        io::copy(&mut server_reader, &mut local_writer).await?;
-        local_writer.shutdown().await
-    };
-    tokio::try_join!(client_to_server, server_to_client)?;
+
+	if https { client_stream.write_all(b"HTTP/1.1 200 Connection established\r\n\r\n").await?;} 
+	else { server_stream.write_all(&buf[..count]).await?; }
+
+    	tokio::io::copy_bidirectional(&mut client_stream, &mut server_stream).await?;
+
 	Ok(())
 }
